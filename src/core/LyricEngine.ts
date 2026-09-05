@@ -46,20 +46,13 @@ export class LyricEngine {
 
   parseFromTextContent(textContent: string): LyricData {
     if (!textContent.trim()) return { lines: [], metadata: {} }
+    if (!/\[\d{1,2}:\d{2}[\.:]\d{1,3}\]/.test(textContent)) {
+      return this.parsePlainLines(textContent.split('\n'))
+    }
     const buf = encodeText(textContent)
     const lyric = new Lyric(buf) as unknown as LyricInternal
-
-    const lines = lyric.lines || []
-    const hasAnyTimestamp = lines.some(
-      (l) => l.startTime > 0 || (l.words && l.words.some((w) => (w.startTime ?? 0) > 0)),
-    )
-
-    if (hasAnyTimestamp) {
-      this.lyric = lyric
-      return this.toLyricData()
-    }
-
-    return this.parsePlainLines(textContent.split('\n'))
+    this.lyric = lyric
+    return this.toLyricData()
   }
 
   parsePlainLines(rawLines: string[]): LyricData {
