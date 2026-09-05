@@ -1,0 +1,65 @@
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.lyric-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.lyric-editor-row:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.lyric-editor-row.selected {
+  background-color: #e6f4ff;
+}
+
+.lyric-editor-row .row-index {
+  width: 32px;
+  color: #999;
+  font-size: 12px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.lyric-editor-row .row-time {
+  width: 72px;
+  color: #1677ff;
+  font-size: 12px;
+  font-family: monospace;
+  flex-shrink: 0;
+}
+
+.lyric-editor-row .row-text {
+  flex: 1;
+  font-size: 14px;
+}
+
+.lyric-editor-row.current-line {
+  background-color: #fff7e6;
+}
+
+.lyric-editor-row.current-line.selected {
+  background-color: #ffe7ba;
+}
+
+.drop-zone-active {
+  background-color: rgba(22, 119, 255, 0.08) !important;
+  border: 2px dashed #1677ff !important;
+}
