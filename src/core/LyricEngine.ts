@@ -2,6 +2,7 @@ import Lyric, { LyricController } from '@jyostudio/lyric'
 import type { LyricData, LyricLine, LyricMetadata } from '@shared/types'
 import { splitTextToWords, encodeText } from '@shared/utils'
 import type { LyricFormat } from '@shared/constants'
+import { useLyricStore } from '@/store/lyricStore'
 
 function formatTime(ms: number): string {
   const rounded = Math.round(ms)
@@ -57,6 +58,7 @@ export class LyricEngine {
   }
 
   parsePlainLines(rawLines: string[]): LyricData {
+    const mixedMode = useLyricStore.getState().mixedLanguageMode
     const lines: LyricLine[] = rawLines
       .map((l) => l.trim())
       .filter(Boolean)
@@ -64,7 +66,7 @@ export class LyricEngine {
         text,
         startTime: 0,
         duration: 0,
-        words: splitTextToWords(text),
+        words: splitTextToWords(text, mixedMode),
       }))
     this.lyric = null
     return { lines, metadata: {} }
@@ -213,7 +215,8 @@ export class LyricEngine {
 
       const hasAnyWordTimestamp = wordsFromLib.some((w) => w.startTime > 0)
 
-      const finalWords = hasAnyWordTimestamp ? wordsFromLib : splitTextToWords(text)
+      const mixedMode = useLyricStore.getState().mixedLanguageMode
+      const finalWords = hasAnyWordTimestamp ? wordsFromLib : splitTextToWords(text, mixedMode)
 
       return {
         text,

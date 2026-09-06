@@ -1,4 +1,4 @@
-import { Modal, theme, Input, Button, message } from 'antd'
+import { Modal, theme, Input, Button, message, Switch } from 'antd'
 import { EditOutlined } from '@ant-design/icons'
 import { useEffect, useState } from 'react'
 import { useLyricStore } from '@/store/lyricStore'
@@ -22,6 +22,8 @@ export function EditLyricModal({ open, onClose }: Props) {
   const lyricData = useLyricStore((s) => s.lyricData)
   const updateMetadata = useLyricStore((s) => s.updateMetadata)
   const batchUpdateLyricText = useLyricStore((s) => s.batchUpdateLyricText)
+  const mixedLanguageMode = useLyricStore((s) => s.mixedLanguageMode)
+  const setMixedLanguageMode = useLyricStore((s) => s.setMixedLanguageMode)
 
   const [metaDraft, setMetaDraft] = useState<LyricMetadata>({})
   const [batchText, setBatchText] = useState('')
@@ -77,6 +79,33 @@ export function EditLyricModal({ open, onClose }: Props) {
     >
       {hasContent ? (
         <>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '10px 14px',
+              marginBottom: 16,
+              background: token.colorBgLayout,
+              borderRadius: 8,
+              border: `1px solid ${token.colorBorderSecondary}`,
+            }}
+          >
+            <Switch
+              checked={mixedLanguageMode}
+              onChange={(checked) => setMixedLanguageMode(checked)}
+              size="small"
+            />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: token.colorText }}>
+                混合语言模式
+              </div>
+              <div style={{ fontSize: 12, color: token.colorTextTertiary }}>
+                开启后，中/日/韩文逐字打轴，字母语言等按单词打轴
+              </div>
+            </div>
+          </div>
+
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: token.colorText }}>
             元数据
           </div>
