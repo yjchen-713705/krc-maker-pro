@@ -1,30 +1,54 @@
-# React + TypeScript + Vite
+# KRC Maker Pro
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一个跨平台的桌面歌词制作工具，复刻酷狗音乐歌词制作功能。基于 **Electron + React + Vite + Ant Design** 构建。
 
-Currently, two official plugins are available:
+## 环境要求
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Node.js >= 18
+- [pnpm](https://pnpm.io/)（推荐）
 
-## Expanding the ESLint configuration
+## 安装依赖
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+```bash
+pnpm install
+```
 
-- Configure the top-level `parserOptions` property like this:
+## 开发模式
 
-```js
-export default {
-  // other rules...
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json'],
-    tsconfigRootDir: __dirname,
-  },
+同时启动 Vite 开发服务器和 Electron 窗口，支持 HMR 热更新。
+
+```bash
+pnpm dev
+```
+
+## 构建打包
+
+构建前端和 Electron 主进程代码，然后用 `electron-builder` 打包成对应平台的安装包。
+
+```bash
+pnpm build
+```
+
+产物输出在 `release/${version}/` 目录下。
+
+### 平台配置说明
+
+打包配置位于 `electron-builder.json5`，默认已开启以下平台：
+
+| 平台 | 产物格式 |
+|------|----------|
+| macOS (arm64) | `.dmg` |
+| Windows (x64) | `.exe` (NSIS 安装向导) |
+| Linux | `.AppImage` |
+
+### Electron 镜像源
+
+由于 GitHub 证书链问题，已在配置中指定 npmmirror 镜像源下载 Electron 二进制：
+
+```json5
+electronDownload: {
+  mirror: 'https://npmmirror.com/mirrors/electron/'
 }
 ```
 
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+如需切换其他镜像（腾讯云、阿里云等），直接修改此处的 `mirror` 地址即可。
