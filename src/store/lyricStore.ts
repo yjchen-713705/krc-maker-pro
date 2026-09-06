@@ -26,6 +26,9 @@ interface LyricStore {
   setAudioFile: (path: string, fileName: string) => void
   setLyricPath: (path: string | null) => void
 
+  updateMetadata: (partial: Partial<LyricData['metadata']>) => void
+  batchUpdateLyricText: (rawText: string) => void
+
   setPlayState: (partial: Partial<PlayState>) => void
   setCurrentTime: (time: number) => void
 
@@ -46,7 +49,7 @@ interface LyricStore {
   findNextUnmarkedWord: () => { lineIndex: number; wordIndex: number } | null
 
   pushHistory: () => void
-  undo: () => void
+  undo: () => number | null
   redo: () => void
   clearHistory: () => void
 
@@ -97,6 +100,29 @@ function findLastMarkedLine(lyricData: LyricData, editMode: EditMode): number | 
   return null
 }
 
+function diffSeekTarget(current: LyricData, target: LyricData): number | null {
+  const curLines = current.lines
+  const tgtLines = target.lines
+
+  for (let li = 0; li < Math.min(curLines.length, tgtLines.length); li++) {
+    const curLine = curLines[li]
+    const tgtLine = tgtLines[li]
+
+    if (curLine.startTime > 0 && tgtLine.startTime <= 0) {
+      return Math.max(0, curLine.startTime - 1000)
+    }
+
+    for (let wi = 0; wi < Math.min(curLine.words.length, tgtLine.words.length); wi++) {
+      const curW = curLine.words[wi]
+      const tgtW = tgtLine.words[wi]
+      if (curW.startTime > 0 && tgtW.startTime <= 0) {
+        return Math.max(0, curW.startTime - 1000)
+      }
+    }
+  }
+  return null
+}
+
 export const useLyricStore = create<LyricStore>((set, get) => ({
   lyricData: { lines: [], metadata: {} },
   audioPath: null,
@@ -118,6 +144,50 @@ export const useLyricStore = create<LyricStore>((set, get) => ({
     set({ audioPath: path, audioFileName: fileName }),
 
   setLyricPath: (path) => set({ lyricPath: path }),
+
+  updateMetadata: (partial) => {
+    set((s) => ({
+      lyricData: { ...s.lyricData, metadata: { ...s.lyricData.metadata, ...partial } },
+    }))
+    get().pushHistory()
+  },
+
+  batchUpdateLyricText: (rawText) => {
+    const newTexts = rawText
+      .split('\n')
+      .map((l) => l.trimEnd())
+      .filter((l) => l.length > 0 || rawText.includes('\n'))
+
+    set((s) => {
+      const oldLines = s.lyricData.lines
+      const newLines: LyricLine[] = []
+
+      for (let li = 0; li < newTexts.length; li++) {
+        const newText = newTexts[li]
+        const oldLine = oldLines[li]
+
+        if (oldLine && oldLine.text === newText) {
+          newLines.push({ ...oldLine })
+        } else if (oldLine) {
+          newLines.push({
+            ...oldLine,
+            text: newText,
+            words: splitTextToWords(newText).map((w) => ({ ...w, startTime: 0 })),
+          })
+        } else {
+          newLines.push({
+            text: newText,
+            startTime: 0,
+            duration: 0,
+            words: splitTextToWords(newText),
+          })
+        }
+      }
+
+      return { lyricData: { ...s.lyricData, lines: newLines } }
+    })
+    get().pushHistory()
+  },
 
   setPlayState: (partial) =>
     set((s) => ({ playState: { ...s.playState, ...partial } })),
@@ -247,8 +317,11 @@ export const useLyricStore = create<LyricStore>((set, get) => ({
 
   undo: () => {
     const s = get()
-    if (s.historyIndex <= 0) return
+    if (s.historyIndex <= 0) return null
     const targetIndex = s.historyIndex - 1
+
+    const seekTarget = diffSeekTarget(s.lyricData, s.history[targetIndex])
+
     set({ _isRestoring: true })
     try {
       set((prev) => {
@@ -270,6 +343,7 @@ export const useLyricStore = create<LyricStore>((set, get) => ({
     } finally {
       set({ _isRestoring: false })
     }
+    return seekTarget
   },
 
   redo: () => {

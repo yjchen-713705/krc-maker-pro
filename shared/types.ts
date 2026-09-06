@@ -15,6 +15,8 @@ export interface LyricMetadata {
   title?: string
   artist?: string
   album?: string
+  producer?: string
+  lyricMaker?: string
 }
 
 export interface LyricData {

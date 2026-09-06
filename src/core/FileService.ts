@@ -34,12 +34,18 @@ export class FileService {
     return result
   }
 
+  async openFolder(): Promise<string | null> {
+    if (!window.electronAPI) return null
+    return window.electronAPI.openFolderDialog()
+  }
+
   async saveLyricFile(
     defaultName: string,
     data: ArrayBuffer,
+    defaultDir?: string,
   ): Promise<string | null> {
     if (!window.electronAPI) return null
-    const savePath = await window.electronAPI.saveLyricDialog(defaultName)
+    const savePath = await window.electronAPI.saveLyricDialog({ defaultName, defaultDir })
     if (!savePath) return null
     await window.electronAPI.writeFile(savePath, data)
     return savePath

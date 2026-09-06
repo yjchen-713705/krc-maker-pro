@@ -5,6 +5,7 @@ import path from "node:path";
 const IPC_CHANNELS = {
   DIALOG_OPEN_AUDIO: "dialog:openAudio",
   DIALOG_OPEN_LYRIC: "dialog:openLyric",
+  DIALOG_OPEN_FOLDER: "dialog:openFolder",
   DIALOG_SAVE_LYRIC: "dialog:saveLyric",
   FILE_READ: "file:read",
   FILE_WRITE: "file:write"
@@ -64,12 +65,21 @@ function registerIpcHandlers() {
     });
     return result.canceled ? null : result.filePaths[0];
   });
-  ipcMain.handle(IPC_CHANNELS.DIALOG_SAVE_LYRIC, async (_e, defaultName) => {
+  ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_FOLDER, async () => {
+    if (!win)
+      return null;
+    const result = await dialog.showOpenDialog(win, {
+      title: "选择默认保存路径",
+      properties: ["openDirectory"]
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  ipcMain.handle(IPC_CHANNELS.DIALOG_SAVE_LYRIC, async (_e, args) => {
     if (!win)
       return null;
     const result = await dialog.showSaveDialog(win, {
       title: "保存歌词文件",
-      defaultPath: defaultName,
+      defaultPath: args.defaultDir ? path.join(args.defaultDir, args.defaultName) : args.defaultName,
       filters: [
         { name: "KRC 格式", extensions: ["krc"] },
         { name: "LRC 格式", extensions: ["lrc"] }

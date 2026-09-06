@@ -1,6 +1,7 @@
 export const IPC_CHANNELS = {
   DIALOG_OPEN_AUDIO: 'dialog:openAudio',
   DIALOG_OPEN_LYRIC: 'dialog:openLyric',
+  DIALOG_OPEN_FOLDER: 'dialog:openFolder',
   DIALOG_SAVE_LYRIC: 'dialog:saveLyric',
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',

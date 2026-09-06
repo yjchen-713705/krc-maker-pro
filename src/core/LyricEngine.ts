@@ -70,27 +70,75 @@ export class LyricEngine {
     return { lines, metadata: {} }
   }
 
-  generate(lyricData: LyricData, format: Exclude<LyricFormat, 'txt'>): ArrayBuffer {
-    const lrcText = this.toLrcText(lyricData)
+  generate(lyricData: LyricData, format: Exclude<LyricFormat, 'txt'>, songDuration?: number): ArrayBuffer {
+    const lrcText = this.toLrcText(lyricData, songDuration)
     const lyric = new Lyric(encodeText(lrcText))
     return Lyric.generate(lyric, format)
   }
 
-  private toLrcText(lyricData: LyricData): string {
+  private toLrcText(lyricData: LyricData, songDuration?: number): string {
     const lines: string[] = []
     const md = lyricData.metadata
     if (md.title) lines.push(`[ti:${md.title}]`)
     if (md.artist) lines.push(`[ar:${md.artist}]`)
     if (md.album) lines.push(`[al:${md.album}]`)
+    if (md.producer) lines.push(`[au:${md.producer}]`)
+    if (md.lyricMaker) lines.push(`[by:${md.lyricMaker}]`)
+    if (songDuration && songDuration > 0) {
+      lines.push(`[length:${formatTime(songDuration)}]`)
+    }
 
-    for (const line of lyricData.lines) {
-      if (line.startTime > 0) {
-        lines.push(`[${formatTime(line.startTime)}]${line.text}`)
-      } else {
+    for (let i = 0; i < lyricData.lines.length; i++) {
+      const line = lyricData.lines[i]
+
+      if (line.startTime <= 0) {
         lines.push(line.text)
+        continue
+      }
+
+      const allWordsMarked = line.words.length > 0 && line.words.every((w) => w.startTime > 0)
+
+      if (allWordsMarked) {
+        const nextLine = lyricData.lines[i + 1]
+        const row = this.buildPerWordRow(line, nextLine, songDuration)
+        lines.push(`[${formatTime(line.startTime)}]${row}`)
+      } else {
+        lines.push(`[${formatTime(line.startTime)}]${line.text}`)
       }
     }
     return lines.join('\n')
+  }
+
+  private buildPerWordRow(
+    line: LyricLine,
+    nextLine: LyricLine | undefined,
+    songDuration: number | undefined,
+  ): string {
+    const parts: string[] = []
+    const words = line.words
+    const wordCount = words.length
+
+    for (let i = 0; i < wordCount; i++) {
+      const w = words[i]
+      let duration: number
+
+      if (i < wordCount - 1) {
+        duration = Math.round(words[i + 1].startTime - w.startTime)
+      } else if (!nextLine && songDuration && songDuration > w.startTime) {
+        duration = Math.round(songDuration - w.startTime)
+      } else if (wordCount >= 2) {
+        duration = Math.round(words[i].startTime - words[i - 1].startTime)
+      } else if (nextLine && nextLine.startTime > 0) {
+        duration = Math.round(nextLine.startTime - w.startTime)
+      } else {
+        duration = 0
+      }
+
+      if (duration < 0) duration = 0
+      parts.push(`<${duration}>${w.text}`)
+    }
+
+    return parts.join('')
   }
 
   updateCurrentTime(ms: number, lyricData?: LyricData): { lineIndex: number; wordIndex: number } {
@@ -180,6 +228,8 @@ export class LyricEngine {
       metadata.title = this.lyric.metadata.ti
       metadata.artist = this.lyric.metadata.ar
       metadata.album = this.lyric.metadata.al
+      metadata.producer = this.lyric.metadata.au
+      metadata.lyricMaker = this.lyric.metadata.by
     }
 
     return { lines, metadata }

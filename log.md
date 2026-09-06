@@ -1,7 +1,9 @@
-# KRC Maker Pro · 第一阶段开发日志
+# KRC Maker Pro · 开发日志
 
-> 完成日期：2026-09-05
-> 目标：搭建完整项目骨架 + 最小可运行 UI + 核心导入/导出/播放/打轴流程
+> 第一阶段完成日期：2026-09-05（骨架 + 核心流程）
+> 第二阶段完成日期：2026-09-05 同日（预览/撤销/键盘/主题）
+> 第三阶段完成日期：2026-09-06（KRC 时间轴修复 + 撤回 seek 功能）
+> 第四阶段完成日期：2026-09-06 同日（设置系统重构 + 快捷键自定义 + 编辑弹窗）
 
 ---
 
@@ -264,3 +266,298 @@ krc-maker/
 |---|------|------|
 | 8 | **history.pushHistory 每次都 structuredClone 整个 lyricData** | 100 行 × 5 字 = 500 word 对象，structuredClone 耗时在几十毫秒级。已从"debounce 合并历史"退回到"每次立即记录"（为了撤销精确性）。MAX_HISTORY = 100 做了上限控制。**决策：保持现状** — 实测 500 对象级耗时 < 50ms，远小于用户操作间隔（几百毫秒），不会造成卡顿。不做增量快照优化 |
 | 9 | **LyricEditor Table 重渲染** | 已分离 playState 订阅。歌词数据任何变化仍会触发表格重渲染。**决策：保持现状** — 200 行以内 Antd Table diff 足够，实际流行歌曲歌词 20-50 行远低于阈值。备选方案：未来超长歌词引入 `react-window` 或 antd `virtual` 属性 |
+
+---
+
+## 九、第三阶段修复（2026-09-06）
+
+### 问题背景
+
+导入酷狗 KRC 后出现三个严重问题：
+1. **普通句延迟一个字**：歌已经唱完了，字还在"渐变播放"
+2. **间奏时滚动非常慢**：间奏时间被算进上一行末字的 duration
+3. **最后一句整体显示 / 逐字跳动**：最后一行整行当瞬时事件处理
+
+### 根因诊断
+
+完整的数据流链路：
+
+```
+用户打轴 → LyricData(words只有startTime, duration=0)
+         → LyricEngine.toLrcText() → 纯 LRC（只有行时间，无逐字时间）
+         → @jyostudio/lyric 解析 → 库内部 #autoDistributePseudoPerWord 伪逐字均分
+         → KRC 生成
+```
+
+**三个根因**：
+
+| # | 根因 | 代码位置 | 后果 |
+|---|------|---------|------|
+| 1 | `toLrcText()` 只输出纯 LRC `[mm:ss.SS]文本`，不输出 TRC 逐字格式 `<duration>字` | `LyricEngine.ts:79-94` | 库把整行当一个 Word，伪逐字均分 `line.duration / 字数`。但 `line.duration` 是"下一行 startTime − 当前行 startTime"，把间奏也算进去了 |
+| 2 | 非末行末字 duration 用 `nextLine.startTime - lastWord.startTime`，把句间间隔也吞了 | 修复后新增的末字 fallback 逻辑 | 末字时长是其他字的 3+ 倍，渐变跨到下一句时间窗口，酷狗强制切换导致"闪动" |
+| 3 | 未输出 `[length:mm:ss]` metadata，最后一行 `line.duration = Infinity`，KRC generator 把 Infinity 替换成 0 | 库 `src/parsers/lrc.ts` #setLastLineDuration | 最后一行 KRC 行头 `[startTime, 0]`，酷狗当作瞬时事件 → 整行逐字跳动 |
+
+### 修复方案（三处改动，集中在 LyricEngine.ts）
+
+**修复 1：toLrcText() 改为输出 TRC 逐字格式**
+
+```typescript
+// 改前：纯 LRC
+[00:05.00]消防车的电话幺幺九。
+
+// 改后：TRC 格式，逐字带 duration
+[00:05.00]<400>消<400>防<400>车<400>的<400>电<400>话<400>幺<400>幺<400>九。
+```
+
+逐字模式条件：`line.words.every(w => w.startTime > 0)`，否则降级为纯 LRC（防"部分标记"的中间状态）。
+
+逐字 duration 计算：
+- 中间字 i：`words[i+1].startTime - words[i].startTime`
+- 末字（wordCount ≥ 2）：`words[last].startTime - words[last-1].startTime`（用前一字实际时长，**不**包含句间间隔）
+- 末字（wordCount = 1）：fallback 链 `nextLine.startTime` → `songDuration` → `0`
+- `duration < 0` clamp 到 0
+
+**修复 2：generate() 新增 songDuration 参数，输出 `[length:mm:ss]`**
+
+```typescript
+// Toolbar.tsx 调用时传入音频总时长
+lyricEngine.generate(lyricData, format, playState.duration || undefined)
+```
+
+有 songDuration 时在 LRC 输出开头追加 `[length:mm:ss]` metadata，库的 `#setLastLineDuration` 就能正确算出最后一行的 `line.duration = songLen - lastLine.startTime`（有限正数）。
+
+**修复 3：保留 `<0>` 标签，不跳过**
+
+即使 duration ≤ 0 也输出 `<0>` 标签。跳过会导致库的 parser 按 `<\d+>` 拆分时文本错位（后续字标签对应前一个字文本）。酷狗 KRC 的 `duration=0` 合法，代表瞬时完成。
+
+### 修改文件汇总
+
+| 文件 | 改动 |
+|------|------|
+| `src/core/LyricEngine.ts` | 重写 `toLrcText()`：新增 `buildPerWordRow()` 计算逐字 duration，输出 TRC 格式；`generate()` 签名新增可选 `songDuration?: number`；有总时长时输出 `[length:mm:ss]` |
+| `src/components/Toolbar.tsx` | 导出调用传入 `playState.duration` |
+
+### 验证
+
+| 场景 | 结果 |
+|------|------|
+| 普通句：字时长 = 相邻字间隔，无多余间隔 | ✅ |
+| 有间奏的句：末字用前一字时长，不跨窗口 | ✅ 无闪动 |
+| 最后一行（有 songDuration）：KRC 行头 duration 有限正数 | ✅ 平滑滚动 |
+| 最后一行（无 songDuration）：末字 duration 用前一字时长 | ✅ 正常显示（歌曲播完后保持高亮） |
+| 部分标记行（中间状态）：降级纯 LRC | ✅ 不输出逐字标签 |
+| 单行单字末行：fallback 到 songDuration 差值 | ✅ |
+
+---
+
+## 十、撤回自动 Seek 功能（2026-09-06 同日）
+
+### 需求
+
+打轴时 Ctrl+Z 撤回一个字的时间戳后，音频自动 seek 到该字前 1 秒，方便重新标记。
+
+### 实现方案
+
+**在 store 的 undo() 内部 diff 拿 seek 目标，不引入 action 类型追踪**。
+
+| 方案 | 决策 |
+|------|------|
+| A：undo 前 diff 当前快照 vs 目标快照，找 startTime 从 >0 变 ≤0 的字 | ✅ 选中。逻辑集中，不侵入 pushHistory 调用点 |
+| B：pushHistory 时记录 action type + payload | ❌ 每个调用点都要加参数，侵入性大 |
+
+#### 新增 `diffSeekTarget()`（lyricStore.ts）
+
+```typescript
+function diffSeekTarget(current: LyricData, target: LyricData): number | null
+```
+
+遍历 lines × words，找到任何 `startTime > 0 → ≤0` 的项，返回 `Math.max(0, prevTime - 1000)`。找不到返回 null。
+
+#### undo() 返回值变化
+
+```typescript
+// 接口
+undo: () => number | null  // 改前：() => void
+
+// 实现：diff 在前，恢复状态在后
+undo() {
+  const seekTarget = diffSeekTarget(currentState, history[targetIndex])
+  // ... 恢复状态 ...
+  return seekTarget
+}
+```
+
+#### 快捷键层消费（useKeyboardShortcuts.ts）
+
+```typescript
+const seekTarget = undo()
+if (seekTarget !== null) {
+  seek(seekTarget)
+}
+```
+
+#### 自动触发的场景
+
+| 操作 | startTime 变化 | diff 命中 | 自动 seek |
+|------|--------------|----------|----------|
+| 撤回 setWordStartTime | word.startTime >0 → 0 | ✅ | ✅ |
+| 撤回 setLineStartTime | line.startTime >0 → 0 | ✅ | ✅ |
+| 撤回 updateLineText | 无 startTime 变化 | ❌ | ❌ |
+| 撤回 addLine / removeLine | 无 startTime 变化 | ❌ | ❌ |
+| 撤回 resetTimestamps | 所有 startTime >0 → 0 | ✅ **但**批量清时间戳 seek 无意义 | （实际极少发生） |
+
+### 修改文件汇总
+
+| 文件 | 改动 |
+|------|------|
+| `src/store/lyricStore.ts` | 接口 `undo: () => number \| null`；新增 `diffSeekTarget()`；undo 内部 diff 在前，恢复在后 |
+| `src/hooks/useKeyboardShortcuts.ts` | 解构 `seek`；Ctrl+Z 分支 undo 返回值有效时调 `seek(target)`；依赖数组加 `seek` |
+
+### 边界情况
+
+| 场景 | 处理 |
+|------|------|
+| 撤回的是第一个字（无前一字） | `Math.max(0, startTime - 1000)` 兜底到 0 |
+| 不是打轴操作导致的 undo | diff 返回 null → 不 seek |
+| 音频未加载 | seek 到无效时间浏览器自动 clamp |
+| 批量清时间戳撤回 | diff 命中多个，返回第一个（最上方），实际影响极小 |
+
+---
+
+## 十一、UI 小修复（2026-09-06）
+
+| 问题 | 修复 |
+|------|------|
+| 导出按钮左右都有图标（左 UploadOutlined，右 DownloadOutlined） | 只保留左 DownloadOutlined，移除 UploadOutlined import |
+
+---
+
+## 十二、设置系统重构 · 第四阶段（2026-09-06 同日）
+
+### 需求背景
+
+在原有主题设置基础上扩展功能入口：
+1. **文件设置**：默认保存路径，导出 KRC/LRC 时自动填这个目录
+2. **编辑**：元数据（ti/ar/al/au/by）编辑 + 批量歌词文本编辑
+3. **快捷键自定义**：展示所有快捷键、支持修改、冲突检测、恢复默认
+4. **视觉**：原有主题 + 主色调切换（已存在，纳入统一设置面板）
+
+### 架构决策
+
+| 决策点 | 结果 | 理由 |
+|--------|------|------|
+| 功能入口 | **齿轮 SettingsModal（文件/快捷键/视觉）+ toolbar 独立"编辑"按钮** | 用户明确要求编辑按钮在 toolbar 预览与打轴模式之间，不在齿轮里 |
+| 持久化方案 | **localStorage 原生 key**（`custom-shortcuts` / `default-save-path`） | 两类数据分别独立，不走 themeStore 的 persist |
+| 快捷键刷新 | **EventEmitter 自定义事件** `custom-shortcuts-updated` + `storage` 事件 | useKeyboardShortcuts 监听这两个事件，触发 `version++` → useEffect 重注册 handler |
+| 批量文本更新策略 | **未修改行保留时间戳 / 修改行重置字级 startTime** | 平衡效率与正确性，改一个字不丢失整行标记 |
+
+### 新增文件
+
+| 文件 | 说明 |
+|------|------|
+| `shared/shortcuts.ts` | 7 个默认快捷键定义 + `DEFAULT_SHORTCUTS` 数组；`loadCustomShortcuts()` / `saveCustomShortcuts()` / `getResolvedShortcuts()` / `formatShortcutForDisplay()` / `buildShortcutFromEvent()` 五个工具函数 |
+| `shared/storage.ts` | `loadDefaultSavePath()` / `saveDefaultSavePath()` 两个工具函数 |
+| `src/components/EditLyricModal.tsx` | 独立编辑弹窗（元数据 5 字段 + 批量歌词文本 TextArea），从原 SettingsModal 拆出 |
+
+### 修改文件汇总
+
+| 文件 | 改动 |
+|------|------|
+| `src/components/SettingsModal.tsx` | 从单功能弹窗扩展为多标签页设置面板（左侧菜单 + 右侧内容区）；标签页缩减为文件/快捷键/视觉三个（编辑已拆出）；新增默认保存路径选择；新增快捷键自定义 |
+| `src/components/Toolbar.tsx` | 新增 EditLyricModal import + `editOpen` state + 编辑按钮（`EditOutlined` 图标，位于"预览"与分隔线之间）；底部挂载 `<EditLyricModal>` 组件 |
+| `src/hooks/useKeyboardShortcuts.ts` | 移除所有硬编码快捷键字符串，改从 `getResolvedShortcuts()` 动态读配置；新增 `version` state + `storage`/`custom-shortcuts-updated` 事件监听触发刷新；撤销/重做逻辑保留 |
+| `src/store/lyricStore.ts` | 接口新增 `updateMetadata: (partial) => void` 和 `batchUpdateLyricText: (rawText) => void` 两个 action |
+
+### 快捷键自定义实现细节
+
+**冲突检测**：用户按下新组合键时，遍历 `DEFAULT_SHORTCUTS`（排除自身），查找其当前生效快捷键（优先 customShortcuts 中的覆盖值，否则 defaultShortcut），如果相同则提示冲突。
+
+```typescript
+for (const def of DEFAULT_SHORTCUTS) {
+  if (def.id !== editingShortcut) {
+    const resolved = customShortcuts[def.id] ?? def.defaultShortcut
+    if (resolved === shortcut) {
+      message.warning(`该快捷键已被「${def.name}」占用`)
+      return
+    }
+  }
+}
+```
+
+**动态刷新机制**：
+
+```
+SettingsModal 保存 → saveCustomShortcuts() → window.dispatchEvent('custom-shortcuts-updated')
+                                               ↓
+useKeyboardShortcuts 监听 → version++ → useEffect 重注册 handler → getResolvedShortcuts() 读新值
+```
+
+**恢复默认**：在编辑快捷键输入框中按 Backspace/Delete，直接从 customShortcuts 中删除该 id，保存后恢复使用 defaultShortcut。
+
+### 默认保存路径实现细节
+
+```typescript
+// FileService.openFolder() → window.electronAPI.showOpenDialog({ properties: ['openDirectory'] })
+// 主进程调用 dialog.showOpenDialog({ properties: ['openDirectory'] })
+// 返回选中目录绝对路径 → saveDefaultSavePath(path) 存 localStorage
+// 导出时 loadDefaultSavePath() 拿到路径作为 save dialog defaultPath
+```
+
+### 批量歌词文本更新逻辑
+
+```typescript
+batchUpdateLyricText(rawText):
+  newTexts = rawText.split('\n').map(l => l.trimEnd()).filter(...)
+  for each li:
+    newText = newTexts[li]
+    oldLine = oldLines[li]
+    if oldLine && oldLine.text === newText:  // 文本完全相同
+      push({ ...oldLine })                   // 保留原 line + 所有 words 的 startTime
+    elif oldLine:                            // 文本有变化
+      push({ ...oldLine, text: newText, words: splitTextToWords(newText).map(w => ({ ...w, startTime: 0 })) })
+    else:                                    // 新增行
+      push({ text: newText, startTime: 0, duration: 0, words: splitTextToWords(newText) })
+```
+
+### UI 布局变化
+
+**Toolbar 按钮顺序（左→右）**：
+```
+打开音频 | 打开歌词 | 粘贴歌词 | 导出 ▾ | 预览 | 编辑 | │ 打轴模式: [逐字|逐句]   ⚙
+```
+
+**SettingsModal 三分区**：
+```
+┌────────┬─────────────────────────────────┐
+│ 📁 文件 │  默认保存路径                   │
+│ ⌨ 快捷键 │  快捷键列表（可点击修改）       │
+│ 🎨 视觉 │  白天/黑夜 + 8 主色圆点        │
+└────────┴─────────────────────────────────┘
+```
+
+### 验证
+
+| 检查项 | 结果 |
+|--------|------|
+| `npx tsc --noEmit` | ✅ 0 错误 |
+| `npm run dev` Vite 启动 | ✅ 正常 |
+| 默认保存路径：选择文件夹 → localStorage 持久化 → 刷新保留 | ✅ |
+| 默认保存路径：导出 dialog defaultPath 正确填入 | ✅ |
+| 元数据编辑：修改 → 保存 → 导出 LRC metadata 正确 | ✅ |
+| 批量文本编辑：改一行一个字 → 保存 → 该行重置字时间戳，其他行保留时间戳 | ✅ |
+| 批量文本编辑：未改动行 → 所有字时间戳保留 | ✅ |
+| 快捷键自定义：修改后保存 → 当前会话立即生效（version 刷新） | ✅ |
+| 快捷键自定义：冲突检测（Space 已被 playPause 占用） | ✅ |
+| 快捷键自定义：Backspace → 恢复默认 | ✅ |
+| 快捷键自定义：刷新页面后 localStorage 持久化 | ✅ |
+| 齿轮按钮 SettingsModal 视觉/快捷键/文件三个分区正常切换 | ✅ |
+| 工具栏"编辑"按钮打开 EditLyricModal | ✅ |
+| 工具栏按钮顺序正确（预览→编辑→分隔线→打轴模式） | ✅ |
+
+### 修复的编译问题
+
+| 问题 | 修复 |
+|------|------|
+| `KeyboardOutlined` 图标不存在 | 改为 Ant Design 实际存在的 `KeyOutlined` |
+| SettingsModal `isMac` 导入但未使用 | 移除（shortcut.ts 已导出但当前不消费平台判断） |
+| useKeyboardShortcuts 里残留的旧代码：废弃的 `matchesShortcut` 函数 / `needAlt/needMeta/needCode/keyPart/ctrlOrCmd/shiftKey` 未使用变量 | 重构时直接删掉旧函数，保留纯 `matchesShortcutRaw` + 动态配置读取 |

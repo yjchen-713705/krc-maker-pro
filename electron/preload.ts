@@ -8,8 +8,11 @@ export const api = {
   openLyricDialog: (): Promise<string | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_LYRIC),
 
-  saveLyricDialog: (defaultName: string): Promise<string | null> =>
-    ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SAVE_LYRIC, defaultName),
+  openFolderDialog: (): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FOLDER),
+
+  saveLyricDialog: (args: { defaultName: string; defaultDir?: string }): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SAVE_LYRIC, args),
 
   readFile: (filePath: string): Promise<ArrayBuffer> =>
     ipcRenderer.invoke(IPC_CHANNELS.FILE_READ, filePath),

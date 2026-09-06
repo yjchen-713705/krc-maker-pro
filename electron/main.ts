@@ -66,11 +66,22 @@ function registerIpcHandlers() {
     return result.canceled ? null : result.filePaths[0]
   })
 
-  ipcMain.handle(IPC_CHANNELS.DIALOG_SAVE_LYRIC, async (_e, defaultName: string) => {
+  ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_FOLDER, async () => {
+    if (!win) return null
+    const result = await dialog.showOpenDialog(win, {
+      title: '选择默认保存路径',
+      properties: ['openDirectory'],
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DIALOG_SAVE_LYRIC, async (_e, args: { defaultName: string; defaultDir?: string }) => {
     if (!win) return null
     const result = await dialog.showSaveDialog(win, {
       title: '保存歌词文件',
-      defaultPath: defaultName,
+      defaultPath: args.defaultDir
+        ? path.join(args.defaultDir, args.defaultName)
+        : args.defaultName,
       filters: [
         { name: 'KRC 格式', extensions: ['krc'] },
         { name: 'LRC 格式', extensions: ['lrc'] },

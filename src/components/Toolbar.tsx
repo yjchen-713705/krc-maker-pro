@@ -3,10 +3,10 @@ import {
   FolderOpenOutlined,
   SoundOutlined,
   DownloadOutlined,
-  UploadOutlined,
   FileTextOutlined,
   EyeOutlined,
   SettingOutlined,
+  EditOutlined,
 } from '@ant-design/icons'
 import { useState, useMemo } from 'react'
 import { FileService } from '@/core/FileService'
@@ -16,10 +16,12 @@ import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { FilePickerModal } from './FilePickerModal'
 import { LyricPreview } from './LyricPreview'
 import { SettingsModal } from './SettingsModal'
+import { EditLyricModal } from './EditLyricModal'
 import { clearAllTimestamps } from '@shared/utils'
 import { AUDIO_FORMATS, LYRICAL_FILE_EXTENSIONS } from '@shared/constants'
 import type { LyricFormat } from '@shared/constants'
 import type { EditMode } from '@shared/types'
+import { loadDefaultSavePath } from '@shared/storage'
 
 const fileService = new FileService()
 const lyricEngine = new LyricEngine()
@@ -37,6 +39,7 @@ export function Toolbar() {
   const {
     lyricData,
     uiState,
+    playState,
     setEditMode,
     setAudioFile,
     setLyricData,
@@ -53,6 +56,7 @@ export function Toolbar() {
   const [pasteText, setPasteText] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
 
   const canPreview = useMemo(() => {
     const lines = lyricData.lines
@@ -118,9 +122,10 @@ export function Toolbar() {
       return
     }
     try {
-      const buf = lyricEngine.generate(lyricData, format)
+      const buf = lyricEngine.generate(lyricData, format, playState.duration || undefined)
       const defaultName = `lyric.${format}`
-      const savePath = await fileService.saveLyricFile(defaultName, buf)
+      const defaultDir = loadDefaultSavePath() || undefined
+      const savePath = await fileService.saveLyricFile(defaultName, buf, defaultDir)
       if (savePath) {
         messageApi.success(`导出成功: ${savePath}`)
       }
@@ -170,8 +175,8 @@ export function Toolbar() {
               onClick: ({ key }) => handleExport(key as LyricFormat),
             }}
           >
-            <Button icon={<UploadOutlined />}>
-              导出 <DownloadOutlined />
+            <Button icon={<DownloadOutlined />}>
+              导出
             </Button>
           </Dropdown>
 
@@ -187,6 +192,13 @@ export function Toolbar() {
             disabled={!canPreview}
           >
             预览
+          </Button>
+
+          <Button
+            icon={<EditOutlined />}
+            onClick={() => setEditOpen(true)}
+          >
+            编辑
           </Button>
 
           <div
@@ -255,6 +267,8 @@ export function Toolbar() {
       </Modal>
 
       <LyricPreview open={previewOpen} onClose={() => setPreviewOpen(false)} />
+
+      <EditLyricModal open={editOpen} onClose={() => setEditOpen(false)} />
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
