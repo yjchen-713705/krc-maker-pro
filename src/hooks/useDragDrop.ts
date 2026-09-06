@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { useLyricStore } from '@/store/lyricStore'
 import { LyricEngine } from '@/core/LyricEngine'
+import { clearAllTimestamps } from '@shared/utils'
 
 const lyricEngine = new LyricEngine()
 
 export function useDragDrop() {
   const [isDragging, setIsDragging] = useState(false)
   const { load } = useAudioEngine()
-  const { setAudioFile, setLyricData, setLyricPath, setSelectedLine } = useLyricStore()
+  const { setAudioFile, setLyricData, setLyricPath, setSelectedLine, resetTimestamps } = useLyricStore()
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -21,15 +22,16 @@ export function useDragDrop() {
         const url = URL.createObjectURL(file)
         setAudioFile(file.name, file.name)
         await load(url)
+        resetTimestamps()
       } else if (ext === 'krc' || ext === 'lrc') {
         const buffer = await file.arrayBuffer()
         const data = lyricEngine.parseFromArrayBuffer(buffer)
-        setLyricData(data)
+        setLyricData(clearAllTimestamps(data))
         setLyricPath(null)
         setSelectedLine(0)
       }
     }
-  }, [load, setAudioFile, setLyricData, setLyricPath, setSelectedLine])
+  }, [load, setAudioFile, setLyricData, setLyricPath, setSelectedLine, resetTimestamps])
 
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {

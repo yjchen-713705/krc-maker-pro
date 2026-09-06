@@ -35,4 +35,5 @@ export interface PlayState {
 export interface UIState {
   selectedLineIndex: number
   editMode: EditMode
+  isEditingLyric: boolean
 }

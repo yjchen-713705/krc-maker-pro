@@ -1,19 +1,24 @@
-import { Button, Space, Segmented, message, Dropdown, Modal, Input } from 'antd'
+import { Button, Space, Segmented, message, Dropdown, Modal, Input, theme } from 'antd'
 import {
   FolderOpenOutlined,
   SoundOutlined,
   DownloadOutlined,
   UploadOutlined,
   FileTextOutlined,
+  EyeOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { FileService } from '@/core/FileService'
 import { LyricEngine } from '@/core/LyricEngine'
 import { useLyricStore } from '@/store/lyricStore'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { FilePickerModal } from './FilePickerModal'
+import { LyricPreview } from './LyricPreview'
+import { SettingsModal } from './SettingsModal'
+import { clearAllTimestamps } from '@shared/utils'
+import { AUDIO_FORMATS, LYRICAL_FILE_EXTENSIONS } from '@shared/constants'
 import type { LyricFormat } from '@shared/constants'
-import { AUDIO_FORMATS, LYRICAL_FILE_EXTENSIONS, TEXT_BASED_EXTENSIONS } from '@shared/constants'
 import type { EditMode } from '@shared/types'
 
 const fileService = new FileService()
@@ -28,6 +33,7 @@ async function readFileAsText(file: File): Promise<string> {
 }
 
 export function Toolbar() {
+  const { token } = theme.useToken()
   const {
     lyricData,
     uiState,
@@ -36,6 +42,7 @@ export function Toolbar() {
     setLyricData,
     setLyricPath,
     setSelectedLine,
+    resetTimestamps,
   } = useLyricStore()
   const { loadFile } = useAudioEngine()
   const [messageApi, contextHolder] = message.useMessage()
@@ -44,11 +51,22 @@ export function Toolbar() {
   const [lyricPickerOpen, setLyricPickerOpen] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [pasteText, setPasteText] = useState('')
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  const canPreview = useMemo(() => {
+    const lines = lyricData.lines
+    if (lines.length === 0) return false
+    return lines.some(
+      (l) => l.startTime > 0 || (l.words && l.words.some((w) => w.startTime > 0)),
+    )
+  }, [lyricData])
 
   const handlePickAudio = async (file: File) => {
     try {
       await loadFile(file)
       setAudioFile(file.name, file.name)
+      resetTimestamps()
       messageApi.success(`已加载音频: ${file.name}`)
     } catch (err) {
       messageApi.error(`加载音频失败: ${err instanceof Error ? err.message : err}`)
@@ -61,13 +79,14 @@ export function Toolbar() {
     try {
       const ext = getExtension(file.name)
       let data
-      if (TEXT_BASED_EXTENSIONS.includes(ext as (typeof TEXT_BASED_EXTENSIONS)[number])) {
+      if (ext === 'txt') {
         const text = await readFileAsText(file)
         data = lyricEngine.parseFromTextContent(text)
       } else {
         const buf = await file.arrayBuffer()
         data = lyricEngine.parseFromArrayBuffer(buf)
       }
+      data = clearAllTimestamps(data)
       setLyricData(data)
       setLyricPath(file.name)
       setSelectedLine(0)
@@ -84,7 +103,7 @@ export function Toolbar() {
       messageApi.warning('请先粘贴歌词内容')
       return
     }
-    const data = lyricEngine.parseFromTextContent(pasteText)
+    const data = clearAllTimestamps(lyricEngine.parseFromTextContent(pasteText))
     setLyricData(data)
     setLyricPath(null)
     setSelectedLine(0)
@@ -121,8 +140,11 @@ export function Toolbar() {
       <div
         style={{
           padding: '8px 16px',
-          borderBottom: '1px solid #f0f0f0',
-          background: '#fafafa',
+          borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          background: token.colorBgLayout,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
         }}
       >
         <Space size="middle" wrap>
@@ -153,9 +175,31 @@ export function Toolbar() {
             </Button>
           </Dropdown>
 
-          <div style={{ width: 1, height: 24, background: '#e0e0e0' }} />
+          <Button
+            icon={<EyeOutlined />}
+            onClick={() => {
+              if (!canPreview) {
+                messageApi.warning('请先导入歌词并标记时间戳后再预览')
+                return
+              }
+              setPreviewOpen(true)
+            }}
+            disabled={!canPreview}
+          >
+            预览
+          </Button>
 
-          <span style={{ fontSize: 13, color: '#666' }}>打轴模式:</span>
+          <div
+            style={{
+              width: 1,
+              height: 24,
+              background: token.colorBorderSecondary,
+            }}
+          />
+
+          <span style={{ fontSize: 13, color: token.colorTextSecondary }}>
+            打轴模式:
+          </span>
           <Segmented<EditMode>
             value={uiState.editMode}
             onChange={(v) => setEditMode(v)}
@@ -165,6 +209,12 @@ export function Toolbar() {
             ]}
           />
         </Space>
+
+        <Button
+          type="text"
+          icon={<SettingOutlined />}
+          onClick={() => setSettingsOpen(true)}
+        />
       </div>
 
       <FilePickerModal
@@ -203,6 +253,10 @@ export function Toolbar() {
           placeholder={'每行一句歌词，例如：\n明月几时有\n把酒问青天\n不知天上宫阙\n今夕是何年'}
         />
       </Modal>
+
+      <LyricPreview open={previewOpen} onClose={() => setPreviewOpen(false)} />
+
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   )
 }

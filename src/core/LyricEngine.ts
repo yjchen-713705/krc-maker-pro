@@ -4,10 +4,11 @@ import { splitTextToWords, encodeText } from '@shared/utils'
 import type { LyricFormat } from '@shared/constants'
 
 function formatTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000)
+  const rounded = Math.round(ms)
+  const totalSeconds = Math.floor(rounded / 1000)
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
-  const millis = ms % 1000
+  const millis = rounded % 1000
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0').slice(0, 2)}`
 }
 
@@ -92,9 +93,41 @@ export class LyricEngine {
     return lines.join('\n')
   }
 
-  updateCurrentTime(ms: number): { lineIndex: number; wordIndex: number } {
-    if (!this.lyric) return { lineIndex: -1, wordIndex: -1 }
-    return this.lyric.setCurrentTime(ms)
+  updateCurrentTime(ms: number, lyricData?: LyricData): { lineIndex: number; wordIndex: number } {
+    if (this.lyric) {
+      return this.lyric.setCurrentTime(ms)
+    }
+    if (!lyricData) return { lineIndex: -1, wordIndex: -1 }
+
+    const lines = lyricData.lines
+    let bestLineIndex = -1
+    let bestStartTime = -1
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      if (line.startTime > 0 && line.startTime <= ms && line.startTime > bestStartTime) {
+        bestStartTime = line.startTime
+        bestLineIndex = i
+      }
+    }
+
+    if (bestLineIndex < 0) return { lineIndex: -1, wordIndex: -1 }
+
+    const line = lines[bestLineIndex]
+    let bestWordIndex = -1
+    let bestWordTime = -1
+
+    if (line.words && line.words.length > 0) {
+      for (let i = 0; i < line.words.length; i++) {
+        const w = line.words[i]
+        if (w.startTime > 0 && w.startTime <= ms && w.startTime > bestWordTime) {
+          bestWordTime = w.startTime
+          bestWordIndex = i
+        }
+      }
+    }
+
+    return { lineIndex: bestLineIndex, wordIndex: bestWordIndex }
   }
 
   getLyricController(): LyricController | null {

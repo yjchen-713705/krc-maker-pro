@@ -1,5 +1,5 @@
 import { AudioOutlined } from '@ant-design/icons'
-import { Modal, message } from 'antd'
+import { Modal, message, theme } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 
 interface FilePickerModalProps {
@@ -21,6 +21,7 @@ export function FilePickerModal({
   onPickLyric,
   onCancel,
 }: FilePickerModalProps) {
+  const { token } = theme.useToken()
   const [messageApi, contextHolder] = message.useMessage()
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -89,13 +90,13 @@ export function FilePickerModal({
   }
 
   const dashBorder = {
-    border: `2px dashed ${dragOver ? '#1677ff' : '#d9d9d9'}`,
+    border: `2px dashed ${dragOver ? token.colorPrimary : token.colorBorder}`,
     borderRadius: 8,
     padding: '40px 20px',
     textAlign: 'center' as const,
     cursor: 'pointer',
     transition: 'all 0.2s',
-    background: dragOver ? 'rgba(22,119,255,0.04)' : '#fafafa',
+    background: dragOver ? token.colorPrimaryBg : token.colorBgLayout,
   }
 
   return (
@@ -117,11 +118,13 @@ export function FilePickerModal({
           onDragOver={onDragOver}
           onDrop={onDrop}
         >
-          <AudioOutlined style={{ fontSize: 48, color: '#1677ff', marginBottom: 16 }} />
-          <div style={{ fontSize: 15, color: '#333', marginBottom: 4 }}>
+          <AudioOutlined
+            style={{ fontSize: 48, color: token.colorPrimary, marginBottom: 16 }}
+          />
+          <div style={{ fontSize: 15, color: token.colorText, marginBottom: 4 }}>
             点击选择或拖拽{label}文件到此处
           </div>
-          <div style={{ fontSize: 13, color: '#999' }}>
+          <div style={{ fontSize: 13, color: token.colorTextTertiary }}>
             支持格式：{extensions.map((e) => `.${e}`).join(' / ')}
           </div>
           <input

@@ -1,4 +1,4 @@
-import { Slider, Button, Space, Tooltip } from 'antd'
+import { Slider, Button, Space, Tooltip, theme } from 'antd'
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -8,16 +8,10 @@ import {
 import { useState } from 'react'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { useLyricStore } from '@/store/lyricStore'
-
-function formatTime(ms: number): string {
-  if (ms < 0) ms = 0
-  const totalSec = Math.floor(ms / 1000)
-  const min = Math.floor(totalSec / 60)
-  const sec = totalSec % 60
-  return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
-}
+import { formatTimeDisplay } from '@shared/utils'
 
 export function AudioControls() {
+  const { token } = theme.useToken()
   const { playState, audioFileName } = useLyricStore()
   const { togglePlay, seek, setVolume } = useAudioEngine()
   const [volume, setVolumeLocal] = useState(1)
@@ -49,8 +43,8 @@ export function AudioControls() {
     <div
       style={{
         padding: '12px 24px',
-        borderTop: '1px solid #f0f0f0',
-        background: '#fafafa',
+        borderTop: `1px solid ${token.colorBorderSecondary}`,
+        background: token.colorBgLayout,
         display: 'flex',
         alignItems: 'center',
         gap: 16,
@@ -70,8 +64,16 @@ export function AudioControls() {
         disabled={!audioFileName}
       />
 
-      <span style={{ fontFamily: 'monospace', fontSize: 13, color: '#555', width: 90, textAlign: 'right' }}>
-        {formatTime(playState.currentTime)}
+      <span
+        style={{
+          fontFamily: 'monospace',
+          fontSize: 13,
+          color: token.colorTextSecondary,
+          width: 90,
+          textAlign: 'right',
+        }}
+      >
+        {formatTimeDisplay(playState.currentTime)}
       </span>
 
       <Slider
@@ -81,11 +83,18 @@ export function AudioControls() {
         onChange={handleSeek}
         style={{ flex: 1, margin: '0 8px' }}
         disabled={!audioFileName}
-        tooltip={{ formatter: (v) => formatTime(v ?? 0) }}
+        tooltip={{ formatter: (v) => formatTimeDisplay(v ?? 0) }}
       />
 
-      <span style={{ fontFamily: 'monospace', fontSize: 13, color: '#555', width: 90 }}>
-        {formatTime(playState.duration)}
+      <span
+        style={{
+          fontFamily: 'monospace',
+          fontSize: 13,
+          color: token.colorTextSecondary,
+          width: 90,
+        }}
+      >
+        {formatTimeDisplay(playState.duration)}
       </span>
 
       <Space size={8} style={{ marginLeft: 8 }}>
@@ -108,7 +117,17 @@ export function AudioControls() {
       </Space>
 
       {audioFileName && (
-        <span style={{ marginLeft: 8, color: '#999', fontSize: 12, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span
+          style={{
+            marginLeft: 8,
+            color: token.colorTextTertiary,
+            fontSize: 12,
+            maxWidth: 200,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
           {audioFileName}
         </span>
       )}

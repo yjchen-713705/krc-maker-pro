@@ -12,7 +12,6 @@ export class AudioEngine {
 
   load(src: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.revokeObjectUrl()
       this.stopTimeUpdate()
       this.audio.pause()
       const onError = () => {

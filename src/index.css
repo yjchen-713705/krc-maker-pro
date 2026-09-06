@@ -23,16 +23,16 @@ html, body, #root {
 }
 
 .lyric-editor-row:hover {
-  background-color: rgba(0, 0, 0, 0.04);
+  background-color: var(--ant-color-fill-secondary);
 }
 
 .lyric-editor-row.selected {
-  background-color: #e6f4ff;
+  background-color: var(--ant-color-primary-bg);
 }
 
 .lyric-editor-row .row-index {
   width: 32px;
-  color: #999;
+  color: var(--ant-color-text-tertiary);
   font-size: 12px;
   text-align: right;
   flex-shrink: 0;
@@ -40,7 +40,7 @@ html, body, #root {
 
 .lyric-editor-row .row-time {
   width: 72px;
-  color: #1677ff;
+  color: var(--ant-color-primary);
   font-size: 12px;
   font-family: monospace;
   flex-shrink: 0;
@@ -52,14 +52,18 @@ html, body, #root {
 }
 
 .lyric-editor-row.current-line {
-  background-color: #fff7e6;
+  background-color: var(--ant-color-warning-bg);
 }
 
 .lyric-editor-row.current-line.selected {
-  background-color: #ffe7ba;
+  background-color: var(--ant-color-warning-border);
 }
 
 .drop-zone-active {
-  background-color: rgba(22, 119, 255, 0.08) !important;
-  border: 2px dashed #1677ff !important;
+  background-color: var(--ant-color-primary-bg) !important;
+  border: 2px dashed var(--ant-color-primary) !important;
+}
+
+.ant-table-row-selected > td {
+  background-color: var(--ant-color-primary-bg) !important;
 }
