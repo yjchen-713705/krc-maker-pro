@@ -85,6 +85,7 @@ function registerIpcHandlers() {
       filters: [
         { name: 'KRC 格式', extensions: ['krc'] },
         { name: 'LRC 格式', extensions: ['lrc'] },
+        { name: 'QRC 格式', extensions: ['qrc'] },
       ],
     })
     return result.canceled ? null : result.filePath

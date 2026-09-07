@@ -9,9 +9,9 @@ export const IPC_CHANNELS = {
 
 export const AUDIO_FORMATS = ['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma'] as const
 
-export const LYRIC_FORMATS = ['krc', 'lrc'] as const
+export const LYRIC_FORMATS = ['krc', 'lrc', 'qrc'] as const
 
-export const LYRICAL_FILE_EXTENSIONS = ['krc', 'lrc', 'txt'] as const
+export const LYRICAL_FILE_EXTENSIONS = ['krc', 'lrc', 'qrc', 'txt'] as const
 
 export const TEXT_BASED_EXTENSIONS = ['lrc', 'txt'] as const
 

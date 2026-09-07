@@ -41,9 +41,16 @@ interface LyricInternal {
 export class LyricEngine {
   private lyric: LyricInternal | null = null
 
-  parseFromArrayBuffer(buffer: ArrayBuffer): LyricData {
-    this.lyric = new Lyric(buffer) as unknown as LyricInternal
-    return this.toLyricData()
+  parseFromArrayBuffer(buffer: ArrayBuffer, fileExt?: string): LyricData {
+    try {
+      this.lyric = new Lyric(buffer) as unknown as LyricInternal
+      return this.toLyricData()
+    } catch (_err) {
+      if (fileExt === 'qrc') {
+        throw new Error('该 QRC 文件为加密格式，请使用 QQ 音乐导出的未加密版本。')
+      }
+      throw new Error('歌词文件解析失败：文件格式不支持或已损坏。')
+    }
   }
 
   parseFromTextContent(textContent: string): LyricData {

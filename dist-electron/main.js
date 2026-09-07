@@ -11,7 +11,7 @@ const IPC_CHANNELS = {
   FILE_WRITE: "file:write"
 };
 const AUDIO_FORMATS = ["mp3", "wav", "flac", "ogg", "m4a", "aac", "wma"];
-const LYRICAL_FILE_EXTENSIONS = ["krc", "lrc", "txt"];
+const LYRICAL_FILE_EXTENSIONS = ["krc", "lrc", "qrc", "txt"];
 const require$1 = createRequire(import.meta.url);
 const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
 process.env.APP_ROOT = path.join(__dirname$1, "..");
@@ -82,7 +82,8 @@ function registerIpcHandlers() {
       defaultPath: args.defaultDir ? path.join(args.defaultDir, args.defaultName) : args.defaultName,
       filters: [
         { name: "KRC 格式", extensions: ["krc"] },
-        { name: "LRC 格式", extensions: ["lrc"] }
+        { name: "LRC 格式", extensions: ["lrc"] },
+        { name: "QRC 格式", extensions: ["qrc"] }
       ]
     });
     return result.canceled ? null : result.filePath;

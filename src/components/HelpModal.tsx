@@ -7,10 +7,10 @@ interface Props {
 
 const SECTIONS: { icon: string; title: string; desc: string }[] = [
   { icon: '📂', title: '加载音频', desc: '拖拽音频文件到窗口，或点击"打开音频"按钮' },
-  { icon: '📝', title: '加载歌词', desc: '导入现有 .lrc/.krc 文件，或直接粘贴纯文本歌词' },
+  { icon: '📝', title: '加载歌词', desc: '导入现有歌词件，或直接粘贴纯文本歌词' },
   { icon: '✏️', title: '打轴（标记时间）', desc: '播放音频，在每句歌词开始时按 Enter 标记整句\n或在逐字模式下按 → 键逐字标记' },
   { icon: '👁️', title: '预览', desc: '点击"预览"按钮，全屏查看卡拉OK效果' },
-  { icon: '💾', title: '导出', desc: '导出为 .krc（酷狗专用）或 .lrc（通用）格式' },
+  { icon: '💾', title: '导出', desc: '导出为多种歌词格式' },
 ]
 
 const SHORTCUTS = [

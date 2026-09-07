@@ -91,7 +91,7 @@ export function Toolbar() {
         data = lyricEngine.parseFromTextContent(text)
       } else {
         const buf = await file.arrayBuffer()
-        data = lyricEngine.parseFromArrayBuffer(buf)
+        data = lyricEngine.parseFromArrayBuffer(buf, ext)
       }
       data = clearAllTimestamps(data)
       setLyricData(data)
@@ -140,6 +140,7 @@ export function Toolbar() {
   const exportItems = [
     { key: 'krc', label: '导出为 .krc (酷狗格式)' },
     { key: 'lrc', label: '导出为 .lrc (通用格式)' },
+    { key: 'qrc', label: '导出为 .qrc (QQ音乐格式)' },
   ]
 
   return (

@@ -23,9 +23,9 @@ export function useDragDrop() {
         setAudioFile(file.name, file.name)
         await load(url)
         resetTimestamps()
-      } else if (ext === 'krc' || ext === 'lrc') {
+      } else if (ext === 'krc' || ext === 'lrc' || ext === 'qrc') {
         const buffer = await file.arrayBuffer()
-        const data = lyricEngine.parseFromArrayBuffer(buffer)
+        const data = lyricEngine.parseFromArrayBuffer(buffer, ext)
         setLyricData(clearAllTimestamps(data))
         setLyricPath(null)
         setSelectedLine(0)
