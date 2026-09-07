@@ -7,6 +7,7 @@ import {
   EyeOutlined,
   SettingOutlined,
   EditOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons'
 import { useState, useMemo } from 'react'
 import { FileService } from '@/core/FileService'
@@ -17,6 +18,7 @@ import { FilePickerModal } from './FilePickerModal'
 import { LyricPreview } from './LyricPreview'
 import { SettingsModal } from './SettingsModal'
 import { EditLyricModal } from './EditLyricModal'
+import { HelpModal } from './HelpModal'
 import { clearAllTimestamps } from '@shared/utils'
 import { AUDIO_FORMATS, LYRICAL_FILE_EXTENSIONS } from '@shared/constants'
 import type { LyricFormat } from '@shared/constants'
@@ -57,6 +59,7 @@ export function Toolbar() {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const canPreview = useMemo(() => {
     const lines = lyricData.lines
@@ -222,11 +225,18 @@ export function Toolbar() {
           />
         </Space>
 
-        <Button
-          type="text"
-          icon={<SettingOutlined />}
-          onClick={() => setSettingsOpen(true)}
-        />
+        <Space size={4}>
+          <Button
+            type="text"
+            icon={<QuestionCircleOutlined />}
+            onClick={() => setHelpOpen(true)}
+          />
+          <Button
+            type="text"
+            icon={<SettingOutlined />}
+            onClick={() => setSettingsOpen(true)}
+          />
+        </Space>
       </div>
 
       <FilePickerModal
@@ -271,6 +281,8 @@ export function Toolbar() {
       <EditLyricModal open={editOpen} onClose={() => setEditOpen(false)} />
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
   )
 }

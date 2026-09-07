@@ -4,6 +4,7 @@
 > 第二阶段完成日期：2026-09-05 同日（预览/撤销/键盘/主题）
 > 第三阶段完成日期：2026-09-06（KRC 时间轴修复 + 撤回 seek 功能）
 > 第四阶段完成日期：2026-09-06 同日（设置系统重构 + 快捷键自定义 + 编辑弹窗）
+> 第五阶段完成日期：2026-09-07（混合语言分词 + 帮助指南）
 
 ---
 
@@ -32,7 +33,9 @@ krc-maker/
 ├── shared/
 │   ├── constants.ts         # IPC_CHANNELS / 格式列表常量
 │   ├── types.ts             # LyricData / PlayState / UIState 核心类型
-│   └── utils.ts             # splitTextToWords（标点合并）/ encodeText / decodeBuffer
+│   ├── utils.ts             # splitTextToWords（混合分词策略 + 标点合并）/ isCJK / mergeStandalonePunctuation / encodeText / decodeBuffer
+│   ├── shortcuts.ts         # 默认快捷键定义 + load/save/getResolvedShortcuts 工具
+│   └── storage.ts           # 默认保存路径 load/save 工具
 ├── src/
 │   ├── main.tsx             # 入口：ConfigProvider + zhCN
 │   ├── App.tsx              # 根组件布局
@@ -41,15 +44,19 @@ krc-maker/
 │   │   ├── LyricEngine.ts   # @jyostudio/lyric 封装（parse/generate/toLrcText）
 │   │   └── FileService.ts   # window.electronAPI 调用封装
 │   ├── store/
-│   │   └── lyricStore.ts    # Zustand Store：lyricData + playState + uiState + 全部 actions
+│   │   ├── lyricStore.ts    # Zustand Store：lyricData + playState + uiState + mixedLanguageMode + 全部 actions
+│   │   └── themeStore.ts    # Zustand Store：mode + primaryColor，persist 到 localStorage
 │   ├── hooks/
 │   │   ├── useAudioEngine.ts
 │   │   ├── useKeyboardShortcuts.ts
 │   │   └── useDragDrop.ts
 │   └── components/
-│       ├── Toolbar.tsx          # 顶部工具栏
+│       ├── Toolbar.tsx          # 顶部工具栏（含帮助❓ + 齿轮⚙️）
 │       ├── FilePickerModal.tsx  # 虚线拖拽 + 点击文件选择弹窗
 │       ├── LyricEditor.tsx      # 歌词编辑 Table
+│       ├── EditLyricModal.tsx   # 编辑弹窗：元数据 + 批量歌词文本 + 混合语言模式开关
+│       ├── HelpModal.tsx        # 帮助指南弹窗
+│       ├── SettingsModal.tsx    # 设置弹窗：文件 / 快捷键 / 视觉
 │       └── AudioControls.tsx    # 播放控制条
 ├── vite.config.ts              # 3 个子构建 + preload 复制插件
 ├── tsconfig.json               # TS 严格模式 + paths 别名
@@ -80,6 +87,8 @@ krc-maker/
 | 模式切换（逐字/逐句） | ✅ | Segmented 组件 |
 | 键盘快捷键 | ✅ | Space 播放暂停、→ 标记下一字、Enter 标记整句、↑/↓ 切换行 |
 | 标点附着逻辑 | ✅ | splitTextToWords()：Unicode 属性正则 \p{P}\p{S} 匹配标点，合并到前一字 |
+| 混合语言分词（中日韩逐字 + 字母语言按词） | ✅ | splitTextToWords(text, mixedMode)；mixedMode=false 时自动检测 CJK 决定策略；开关持久化 localStorage |
+| 帮助指南弹窗 | ✅ | Toolbar ❓ 图标 → Modal，6 功能板块 + 快捷键速查 |
 
 ### 三层架构
 
@@ -523,7 +532,7 @@ batchUpdateLyricText(rawText):
 
 **Toolbar 按钮顺序（左→右）**：
 ```
-打开音频 | 打开歌词 | 粘贴歌词 | 导出 ▾ | 预览 | 编辑 | │ 打轴模式: [逐字|逐句]   ⚙
+打开音频 | 打开歌词 | 粘贴歌词 | 导出 ▾ | 预览 | 编辑 | │ 打轴模式: [逐字|逐句]   ❓ ⚙
 ```
 
 **SettingsModal 三分区**：
@@ -561,3 +570,156 @@ batchUpdateLyricText(rawText):
 | `KeyboardOutlined` 图标不存在 | 改为 Ant Design 实际存在的 `KeyOutlined` |
 | SettingsModal `isMac` 导入但未使用 | 移除（shortcut.ts 已导出但当前不消费平台判断） |
 | useKeyboardShortcuts 里残留的旧代码：废弃的 `matchesShortcut` 函数 / `needAlt/needMeta/needCode/keyPart/ctrlOrCmd/shiftKey` 未使用变量 | 重构时直接删掉旧函数，保留纯 `matchesShortcutRaw` + 动态配置读取 |
+
+---
+
+## 十三、混合语言分词 · 第五阶段（2026-09-07）
+
+### 需求背景
+
+原有 `splitTextToWords()` 硬编码**逐字拆分**策略，所有文本（包括纯英文、俄文等字母语言）都被切成单个字符，导致英文歌词体验很差——`Hello world` 变成 `['H','e','l','l','o','w','o','r','l','d']`。
+
+### 目标
+
+- **中/日/韩文**：逐字拆分打轴
+- **英/法/西/俄等字母语言**：按单词拆分打轴
+- 用户可手动开启"混合语言模式"，或让系统自动检测文本语言族
+
+### 决策确认（7 项）
+
+| # | 问题 | 决策 |
+|---|------|------|
+| 1 | 返回类型 | 保持 `LyricWord[]`，新增 `mixedMode: boolean = false` 参数 |
+| 2 | mixedMode=false 行为变更 | 改为**自动检测**：含 CJK 逐字，不含 CJK 按空格拆词（纯英文从逐字变按词，正向改进） |
+| 3 | EditLyricModal 布局 | 不改 Tabs，开关直接加在线性布局顶部 |
+| 4 | 状态存储 | lyricStore + zustand/persist 持久化到 localStorage |
+| 5 | LyricEngine 是否受控 | 是，从 lyricStore.getState().mixedLanguageMode 读值传入 |
+| 6 | 拉丁块标点处理 | mergeStandalonePunctuation() 孤立标点合并到相邻块（`Hello — world` → `['Hello—', 'world']`） |
+| 7 | 切换确认 | Modal.confirm，不展示新旧分词差异预览 |
+
+### 分词策略
+
+```
+splitTextToWords(text, mixedMode)
+
+mixedMode === true:
+  字符是 CJK → 逐字 push
+  字符非 CJK → 累积到 currentLatinBlock，遇空白切分
+  结束后 mergeStandalonePunctuation 合并孤立标点
+
+mixedMode === false:   ← 默认
+  hasCJK = 扫描整串是否含中日韩字符
+  hasCJK === true  → 走逐字拆分（保持 CJK 兼容）
+  hasCJK === false → 按 /\s+/ split，然后 mergeStandalonePunctuation
+```
+
+### 标点处理逻辑
+
+```
+mergeStandalonePunctuation(tokens):
+  输入：['Hello', '—', 'world']    // '—' 前后都是空白
+  规则：长度 === 1 且 isPunctuation(c) 的 token 视为孤立标点
+  合并：'—' 无后续 → 合并到前一个 tokens[0] → ['Hello—', 'world']
+
+  输入：['«', 'Bonjour', '»']
+  '«' 无前 → 合并到后一个 tokens[1]
+  '»' 无后 → 合并到前一个 tokens[1]
+  输出：['«Bonjour»']
+
+  输入：['Hello,', 'world!']
+  标点在 token 内部，不触发孤立合并 → 原样返回
+```
+
+### 新增工具函数
+
+| 函数 | 说明 |
+|------|------|
+| `isCJK(ch: string): boolean` | 单字符正则匹配中日韩统一表意文字 + 假名 + 韩文音节块 |
+| `mergeStandalonePunctuation(tokens: string[]): string[]` | 合并孤立标点到相邻非标点块 |
+
+### 修改文件汇总
+
+| 文件 | 改动 |
+|------|------|
+| `shared/utils.ts` | 新增 `isCJK()` / `mergeStandalonePunctuation()`；重构 `splitTextToWords(text, mixedMode=false)`，保持返回 `LyricWord[]`；删除原硬编码的"字母也逐字"逻辑 |
+| `src/store/lyricStore.ts` | 接口新增 `mixedLanguageMode: boolean`（default `false`）+ `setMixedLanguageMode(enabled)`（含 Modal.confirm → 确认后遍历所有行重分词并重置字级 startTime）；加 persist 中间件持久化此字段；**4 处** `splitTextToWords` 调用全部改为传入当前 `mixedLanguageMode` |
+| `src/components/EditLyricModal.tsx` | 顶部（元数据之上）新增 Switch 开关 + 辅助说明文案（"中/日/韩文逐字打轴，字母语言等按单词打轴"） |
+| `src/core/LyricEngine.ts` | `parsePlainLines`（粘贴纯文本）和 `toLyricData`（导入 KRC/LRC 无逐字时间的 fallback）**2 处** 改用 `useLyricStore.getState().mixedLanguageMode` 静态读值 |
+
+### 自动覆盖范围
+
+切换开关后，下列所有入口的分词策略**同步**更新：
+
+| 入口 | 调用位置 | 生效方式 |
+|------|---------|---------|
+| 用户在 EditLyricModal 编辑歌词文本 | lyricStore.updateLineText → splitTextToWords | ✅ 读 mixedLanguageMode |
+| 批量文本更新 | lyricStore.batchUpdateLyricText → splitTextToWords | ✅ 读 mixedLanguageMode |
+| 添加新行 | lyricStore.addLine → splitTextToWords | ✅ 读 mixedLanguageMode |
+| 粘贴纯文本歌词 | LyricEngine.parsePlainLines → splitTextToWords | ✅ getState().mixedLanguageMode |
+| 导入 KRC/LRC 无逐字时间 fallback | LyricEngine.toLyricData → splitTextToWords | ✅ getState().mixedLanguageMode |
+
+### 验证
+
+| 场景 | mixedMode=false（自动检测） | mixedMode=true |
+|------|--------------------------|----------------|
+| `明月几时有` | `['明', '月', '几', '时', '有']` 逐字 | 同左（含 CJK 即逐字） |
+| `Hello world` | `['Hello', 'world']` 按词 | 同左（无 CJK 即按词） |
+| `Привет мир`（俄语） | `['Привет', 'мир']` 按词 | 同左 |
+| `明月 Hello 世界` | `['明', '月', 'Hello', '世', '界']` | 同左 |
+| `Hello — world` | `['Hello—', 'world']` 标点合并 | 同左 |
+| `« Bonjour »` | `['«Bonjour»']` 标点合并 | 同左 |
+| 切换开关 → 确认 → 所有行重分词 | ✅ | ✅ |
+| 刷新页面 → mixedLanguageMode 恢复 | ✅ localStorage persist | ✅ |
+| 粘贴英文歌词 → 自动按词拆分 | ✅ | ✅ |
+| 导入带 CJK 的 LRC → 逐字 fallback | ✅ | ✅ |
+| `npx tsc --noEmit` | ✅ 0 错误 | ✅ |
+
+---
+
+## 十四、帮助指南弹窗 · 第五阶段（2026-09-07 同日）
+
+### 需求
+
+Toolbar 齿轮图标左侧新增 ❓ 图标，点击弹出操作指南 Modal，帮助新用户快速了解基本使用流程。
+
+### 实现
+
+| 项目 | 细节 |
+|------|------|
+| 新组件 | `src/components/HelpModal.tsx` |
+| 图标 | Ant Design `QuestionCircleOutlined` |
+| 位置 | Toolbar 齿轮按钮左侧，用 `Space size={4}` 紧密排列 |
+| 状态 | `useState` 管理 open/close，不入 Store |
+| 宽度 | 600px，居中 |
+| 关闭方式 | "知道了"按钮、右上角 ✕、点击蒙层（Modal 默认） |
+
+### 弹窗内容结构
+
+```
+📂 加载音频    → 拖拽 / "打开音频" 按钮
+📝 加载歌词    → 导入 .lrc/.krc 或粘贴纯文本
+✏️ 打轴        → Enter 标记整句 / 逐字模式按 →
+👁️ 预览        → 全屏卡拉OK效果
+💾 导出        → .krc / .lrc 格式
+─────────────────────────────────
+快捷键：Space · Enter · → · Ctrl+Z · Ctrl+Y（带 <kbd> 样式）
+```
+
+### 修改文件汇总
+
+| 文件 | 改动 |
+|------|------|
+| `src/components/HelpModal.tsx`（新建） | 独立 Modal 组件，6 个功能板块 + 快捷键速查区 |
+| `src/components/Toolbar.tsx` | 引入 `QuestionCircleOutlined` / `HelpModal`；新增 `helpOpen` state；齿轮按钮前插入 ❓ 按钮（`Space size={4}` 紧凑排列）；JSX 挂载 `<HelpModal>` |
+
+### 验证
+
+| 检查项 | 结果 |
+|--------|------|
+| `npx tsc --noEmit` | ✅ 0 错误 |
+| 点击 ❓ → 弹窗出现 | ✅ |
+| 点击"知道了" → 关闭 | ✅ |
+| 点击 ✕ → 关闭 | ✅ |
+| 点击蒙层 → 关闭 | ✅ |
+| ❓ 与 ⚙️ 间距紧凑（Space size=4） | ✅ |
+| 弹窗内不含 ⚙️ 设置条目 | ✅（已从 SECTIONS 数组移除） |
