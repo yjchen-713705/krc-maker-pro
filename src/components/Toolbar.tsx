@@ -220,8 +220,8 @@ export function Toolbar() {
             value={uiState.editMode}
             onChange={(v) => setEditMode(v)}
             options={[
-              { label: '逐字模式 (→)', value: 'word' },
-              { label: '逐句模式 (Enter)', value: 'line' },
+              { label: '逐字模式', value: 'word' },
+              { label: '逐句模式', value: 'line' },
             ]}
           />
         </Space>
